@@ -4,6 +4,7 @@ package main
 
 import (
 	"github.com/seanrobmerriam/gowasm/pkg/component"
+	"github.com/seanrobmerriam/gowasm/pkg/hydrate"
 	"github.com/seanrobmerriam/gowasm/pkg/router"
 )
 
@@ -49,5 +50,5 @@ func main() {
 		))
 	})
 
-	component.Mount("app", r.View())
+	hydrate.Hydrate("app", r.View())
 }

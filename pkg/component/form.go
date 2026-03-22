@@ -214,11 +214,14 @@ func Select(props SelectProps) Node {
 	// Build option children
 	var children []Node
 	for _, opt := range props.Options {
-		optNode := H("option", Attr("value", opt.Value))
-		if opt.Value == currentValue {
-			optNode.attrs["selected"] = "true"
+		optOpts := []Option{
+			Attr("value", opt.Value),
+			Children(Text(opt.Label)),
 		}
-		optNode.children = append(optNode.children, Text(opt.Label))
+		if opt.Value == currentValue {
+			optOpts = append(optOpts, Attr("selected", "true"))
+		}
+		optNode := H("option", optOpts...)
 		children = append(children, optNode)
 	}
 

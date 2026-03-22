@@ -1,3 +1,5 @@
+//go:build js && wasm
+
 // Package dom provides ergonomic wrappers around syscall/js for working with
 // the browser DOM in Go/WebAssembly.
 package dom

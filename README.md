@@ -185,6 +185,19 @@ the machine.
 
 ---
 
+## Rendering Modes
+
+gowasm now supports three rendering paths built on the same component model:
+
+- Client mount: `component.Mount("app", App{})`
+- Client hydration of SSR HTML: `hydrate.Hydrate("app", App{})`
+- Server-side rendering: `ssr.New().RenderToString(App{})`
+
+The virtual tree used by all three paths lives in `pkg/vdom`, which has no
+browser-runtime dependency and can be used in standard Go server processes.
+
+---
+
 ## Packages
 
 ### `pkg/component`
@@ -230,6 +243,10 @@ before it is removed.
 // Mount blocks forever — call it as the last statement in main().
 component.Mount("app", NewCounter())
 ```
+
+For server-rendered pages, use `hydrate.Hydrate("app", NewCounter())`
+instead. It adopts existing SSR HTML when `data-ssr="true"` is present and
+falls back to a normal client mount otherwise.
 
 **Embedding components in a tree**
 
@@ -341,6 +358,9 @@ Use this mode when you want clean URLs without `#`. `gowasm serve` and
 `gowasm dev` serve `index.html` as a fallback for unknown routes so direct
 navigation and refreshes continue to work.
 
+If the page was server-rendered, pair the router with `hydrate.Hydrate(...)`
+instead of `component.Mount(...)`.
+
 **Handlers**
 
 A handler receives a `RouteContext` and returns a `component.Node`.
@@ -410,6 +430,46 @@ handle.Release() // removes the listener and frees the JS function
 
 ---
 
+### `pkg/vdom`
+
+Pure virtual DOM node definitions shared by client rendering, hydration, and
+SSR. This package has no browser-runtime dependency, which makes it usable in
+plain Go server code.
+
+---
+
+### `pkg/ssr`
+
+Server-side rendering for gowasm components. `pkg/ssr` walks the same
+component tree and produces deterministic HTML strings without requiring
+WebAssembly or a browser.
+
+```go
+renderer := ssr.New()
+fragment, err := renderer.RenderToString(NewApp())
+page := ssr.RenderPage(fragment, ssr.PageOptions{
+    Title:  "My App",
+    RootID: "app",
+})
+```
+
+The generated page wrapper marks the app root with `data-ssr="true"` so the
+client can hydrate it later.
+
+---
+
+### `pkg/hydrate`
+
+Client-side hydration for SSR pages. `pkg/hydrate` claims the existing DOM,
+attaches event listeners, adopts the claimed nodes into the component tree,
+and then hands off to the normal reactive patch loop.
+
+```go
+hydrate.Hydrate("app", NewApp())
+```
+
+---
+
 ## Design notes
 
 **Reactivity is automatic inside Render**
@@ -437,6 +497,12 @@ When using `router.WithHistoryAPI()`, direct navigation to `/users/42` or a
 refresh on that route still works because the server falls back to
 `index.html` for unknown paths.
 
+**SSR and hydration share the same tree**
+
+The server renders `pkg/vdom` descriptions to HTML through `pkg/ssr`, and the
+browser later reuses that HTML through `pkg/hydrate` instead of discarding it
+and remounting from scratch.
+
 **Binary size**
 
 The standard Go toolchain produces binaries in the 2-5MB range for typical
@@ -450,7 +516,7 @@ The `examples/` directory contains:
 
 - `examples/counter` — minimal signal and event handling
 - `examples/router-demo` — multi-page routing with params and links
-- `examples/router-history` — History API router with clean URLs
+- `examples/router-history` — History API router with clean URLs and hydration entrypoint
 - `examples/todo` — shared state, forms, filters, and keyed list rendering
 
 Run either with:
@@ -460,6 +526,12 @@ gowasm dev -dir examples/counter
 gowasm dev -dir examples/router-demo
 gowasm dev -dir examples/router-history
 gowasm dev -dir examples/todo
+```
+
+There is also a minimal host-side SSR demo server:
+
+```bash
+go run ./cmd/ssrserver
 ```
 
 ---
@@ -475,5 +547,4 @@ See LICENSE.md
 - `gowasm new` scaffold command to generate a starter project
 - Form input helpers: `InputValue(e Event) string`, `CheckboxChecked(e Event) bool`
 - TinyGo build target for smaller binaries
-- Server-side rendering and client hydration
 - `go test` harness for unit testing components outside the browser

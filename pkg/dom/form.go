@@ -1,3 +1,5 @@
+//go:build js && wasm
+
 package dom
 
 // InputValue returns the current string value of an <input> or <textarea>

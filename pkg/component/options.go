@@ -8,21 +8,21 @@ type Option func(*ElementNode)
 // Attr sets an HTML attribute on an element node.
 func Attr(key, val string) Option {
 	return func(n *ElementNode) {
-		n.attrs[key] = val
+		n.vnode.Attrs[key] = val
 	}
 }
 
 // Style sets a CSS style property on an element node.
 func Style(prop, val string) Option {
 	return func(n *ElementNode) {
-		n.styles[prop] = val
+		n.vnode.Styles[prop] = val
 	}
 }
 
 // On registers an event handler on an element node.
 func On(event string, h dom.EventHandler) Option {
 	return func(n *ElementNode) {
-		n.events[event] = h
+		n.vnode.Events[event] = h
 	}
 }
 
@@ -30,20 +30,30 @@ func On(event string, h dom.EventHandler) Option {
 func Children(nodes ...Node) Option {
 	return func(n *ElementNode) {
 		n.children = append(n.children, nodes...)
+		for _, child := range nodes {
+			switch c := child.(type) {
+			case *ElementNode:
+				n.vnode.Children = append(n.vnode.Children, c.VNode())
+			case *TextNode:
+				n.vnode.Children = append(n.vnode.Children, c.VNode())
+			case *ComponentNode:
+				n.vnode.Children = append(n.vnode.Children, c.VNode())
+			}
+		}
 	}
 }
 
 // Class adds CSS class names to an element node.
 func Class(names ...string) Option {
 	return func(n *ElementNode) {
-		n.classList = append(n.classList, names...)
+		n.vnode.ClassList = append(n.vnode.ClassList, names...)
 	}
 }
 
 // ID sets the id attribute of an element node.
 func ID(id string) Option {
 	return func(n *ElementNode) {
-		n.id = id
+		n.vnode.ID = id
 	}
 }
 
@@ -53,6 +63,6 @@ func ID(id string) Option {
 // Keys must be unique among siblings.
 func Key(k string) Option {
 	return func(n *ElementNode) {
-		n.key = k
+		n.vnode.Key = k
 	}
 }

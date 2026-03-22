@@ -1,3 +1,5 @@
+//go:build js && wasm
+
 package dom
 
 import "syscall/js"
@@ -5,6 +7,12 @@ import "syscall/js"
 // TextNode represents a DOM text node.
 type TextNode struct {
 	val js.Value
+}
+
+// TextNodeFromJSValue wraps an existing js.Value as a TextNode.
+// Used by the hydration client.
+func TextNodeFromJSValue(v js.Value) TextNode {
+	return TextNode{val: v}
 }
 
 // SetText sets the text content of the text node.

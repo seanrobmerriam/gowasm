@@ -3,6 +3,7 @@ package component
 import (
 	"github.com/seanrobmerriam/gowasm/pkg/dom"
 	"github.com/seanrobmerriam/gowasm/pkg/reactive"
+	"github.com/seanrobmerriam/gowasm/pkg/vdom"
 )
 
 // Node is the unit of UI. Every element in the tree is a Node.
@@ -34,28 +35,18 @@ type OnUnmounter interface {
 
 // ElementNode represents a DOM element node.
 type ElementNode struct {
-	tag       string
-	key       string
-	attrs     map[string]string
-	styles    map[string]string
-	events    map[string]dom.EventHandler
+	vnode     *vdom.Element
+	domEl     dom.Element
 	listeners []dom.ListenerHandle
 	children  []Node
-	classList []string
-	id        string
-	domEl     dom.Element
 }
 
 // H creates a new element node with the given tag and options.
 func H(tag string, opts ...Option) *ElementNode {
 	n := &ElementNode{
-		tag:       tag,
-		attrs:     make(map[string]string),
-		styles:    make(map[string]string),
-		events:    make(map[string]dom.EventHandler),
+		vnode:     vdom.NewElement(tag),
 		listeners: make([]dom.ListenerHandle, 0),
 		children:  make([]Node, 0),
-		classList: make([]string, 0),
 	}
 	for _, opt := range opts {
 		opt(n)
@@ -63,45 +54,52 @@ func H(tag string, opts ...Option) *ElementNode {
 	return n
 }
 
-func (n *ElementNode) getKey() string { return n.key }
+func (n *ElementNode) getKey() string { return n.vnode.Key }
+
+// VNode returns the underlying virtual DOM description.
+// Used by the SSR renderer — not needed in normal component code.
+func (n *ElementNode) VNode() *vdom.Element { return n.vnode }
+
+// SSRChildren returns the children of this ElementNode as a slice of
+// interface{} values. Used by the SSR renderer to walk the tree without
+// a typed import of pkg/component.
+func (n *ElementNode) SSRChildren() []interface{} {
+	result := make([]interface{}, len(n.children))
+	for i, child := range n.children {
+		result[i] = child
+	}
+	return result
+}
+
+// AdoptElement and AdoptTextNode are implemented in the js/wasm-only
+// hydration support file so host builds remain free of browser runtime imports.
 
 // Mount implements Node.
 func (n *ElementNode) Mount(parent dom.Element) dom.Element {
-	el := dom.NewElement(n.tag)
+	el := dom.NewElement(n.vnode.Tag)
 	n.domEl = el
 
-	// Apply ID
-	if n.id != "" {
-		el.SetAttr("id", n.id)
+	if n.vnode.ID != "" {
+		el.SetAttr("id", n.vnode.ID)
 	}
-
-	// Apply classes
-	if len(n.classList) > 0 {
-		el.SetAttr("class", joinStrings(n.classList, " "))
+	if len(n.vnode.ClassList) > 0 {
+		el.SetAttr("class", joinStrings(n.vnode.ClassList, " "))
 	}
-
-	// Apply attributes
-	for k, v := range n.attrs {
+	for k, v := range n.vnode.Attrs {
 		el.SetAttr(k, v)
 	}
-
-	// Apply styles
-	for k, v := range n.styles {
+	for k, v := range n.vnode.Styles {
 		el.SetStyle(k, v)
 	}
-
-	// Apply event listeners
-	for event, handler := range n.events {
-		handle := el.AddEventListener(event, handler)
-		n.listeners = append(n.listeners, handle)
+	for event, handler := range n.vnode.Events {
+		if h, ok := handler.(dom.EventHandler); ok {
+			handle := el.AddEventListener(event, h)
+			n.listeners = append(n.listeners, handle)
+		}
 	}
-
-	// Mount children
 	for _, child := range n.children {
 		child.Mount(el)
 	}
-
-	// Append to parent
 	parent.AppendChild(el)
 	return el
 }
@@ -109,65 +107,59 @@ func (n *ElementNode) Mount(parent dom.Element) dom.Element {
 // Patch implements Node.
 func (n *ElementNode) Patch(old Node) bool {
 	oldEl, ok := old.(*ElementNode)
-	if !ok || oldEl.tag != n.tag {
+	if !ok || oldEl.vnode.Tag != n.vnode.Tag {
 		return false
 	}
 
-	// Inherit the live DOM element from the old node
 	n.domEl = oldEl.domEl
 
-	// Update ID
-	if n.id != oldEl.id {
-		if n.id != "" {
-			n.domEl.SetAttr("id", n.id)
+	if n.vnode.ID != oldEl.vnode.ID {
+		if n.vnode.ID != "" {
+			n.domEl.SetAttr("id", n.vnode.ID)
 		} else {
 			n.domEl.RemoveAttr("id")
 		}
 	}
 
-	// Update classes
-	if len(n.classList) > 0 || len(oldEl.classList) > 0 {
-		n.domEl.SetAttr("class", joinStrings(n.classList, " "))
+	if len(n.vnode.ClassList) > 0 || len(oldEl.vnode.ClassList) > 0 {
+		n.domEl.SetAttr("class", joinStrings(n.vnode.ClassList, " "))
 	}
 
-	// Update attributes
-	for k := range oldEl.attrs {
-		if _, exists := n.attrs[k]; !exists {
+	for k := range oldEl.vnode.Attrs {
+		if _, exists := n.vnode.Attrs[k]; !exists {
 			n.domEl.RemoveAttr(k)
 		}
 	}
-	for k, v := range n.attrs {
-		if oldEl.attrs[k] != v {
+	for k, v := range n.vnode.Attrs {
+		if oldEl.vnode.Attrs[k] != v {
 			n.domEl.SetAttr(k, v)
 		}
 	}
 
-	// Update styles
-	for k := range oldEl.styles {
-		if _, exists := n.styles[k]; !exists {
+	for k := range oldEl.vnode.Styles {
+		if _, exists := n.vnode.Styles[k]; !exists {
 			n.domEl.SetStyle(k, "")
 		}
 	}
-	for k, v := range n.styles {
-		if oldEl.styles[k] != v {
+	for k, v := range n.vnode.Styles {
+		if oldEl.vnode.Styles[k] != v {
 			n.domEl.SetStyle(k, v)
 		}
 	}
 
-	// Release old event listeners before registering new ones
 	for _, handle := range oldEl.listeners {
 		handle.Release()
 	}
 	oldEl.listeners = nil
 	n.listeners = nil
 
-	// Register new event listeners
-	for event, handler := range n.events {
-		handle := n.domEl.AddEventListener(event, handler)
-		n.listeners = append(n.listeners, handle)
+	for event, handler := range n.vnode.Events {
+		if h, ok := handler.(dom.EventHandler); ok {
+			handle := n.domEl.AddEventListener(event, h)
+			n.listeners = append(n.listeners, handle)
+		}
 	}
 
-	// Reconcile children
 	n.patchChildren(oldEl.children)
 
 	return true
@@ -175,7 +167,6 @@ func (n *ElementNode) Patch(old Node) bool {
 
 // patchChildren reconciles the children array.
 func (n *ElementNode) patchChildren(oldChildren []Node) {
-	// Separate keyed and unkeyed old children
 	oldKeyed := make(map[string]Node)
 	oldUnkeyed := make([]Node, 0, len(oldChildren))
 
@@ -187,20 +178,15 @@ func (n *ElementNode) patchChildren(oldChildren []Node) {
 		}
 	}
 
-	// Track which old keyed nodes were consumed
 	consumed := make(map[string]bool)
-
-	// Index into unkeyed old children
 	unkeyedIdx := 0
 
 	for _, newChild := range n.children {
 		k := newChild.getKey()
 
 		if k != "" {
-			// Keyed path: find matching old node by key
 			if oldChild, ok := oldKeyed[k]; ok {
 				consumed[k] = true
-				// Transfer DOM reference for ElementNode
 				if oldEl, ok2 := oldChild.(*ElementNode); ok2 {
 					if newEl, ok3 := newChild.(*ElementNode); ok3 {
 						newEl.domEl = oldEl.domEl
@@ -211,16 +197,13 @@ func (n *ElementNode) patchChildren(oldChildren []Node) {
 					newChild.Mount(n.domEl)
 				}
 			} else {
-				// No matching old node — mount as new
 				newChild.Mount(n.domEl)
 			}
 		} else {
-			// Unkeyed path: match by index (existing behaviour)
 			if unkeyedIdx < len(oldUnkeyed) {
 				oldChild := oldUnkeyed[unkeyedIdx]
 				unkeyedIdx++
 
-				// Transfer DOM reference
 				if oldEl, ok := oldChild.(*ElementNode); ok {
 					if newEl, ok2 := newChild.(*ElementNode); ok2 {
 						newEl.domEl = oldEl.domEl
@@ -237,18 +220,15 @@ func (n *ElementNode) patchChildren(oldChildren []Node) {
 					newChild.Mount(n.domEl)
 				}
 			} else {
-				// No matching old node — mount as new
 				newChild.Mount(n.domEl)
 			}
 		}
 	}
 
-	// Unmount remaining unkeyed old children
 	for i := unkeyedIdx; i < len(oldUnkeyed); i++ {
 		oldUnkeyed[i].Unmount()
 	}
 
-	// Unmount keyed old children that were not consumed
 	for k, child := range oldKeyed {
 		if !consumed[k] {
 			child.Unmount()
@@ -258,37 +238,38 @@ func (n *ElementNode) patchChildren(oldChildren []Node) {
 
 // Unmount implements Node.
 func (n *ElementNode) Unmount() {
-	// Remove event listeners
 	for _, handle := range n.listeners {
 		handle.Release()
 	}
 	n.listeners = nil
 
-	// Unmount children
 	for _, child := range n.children {
 		child.Unmount()
 	}
 
-	// Remove from DOM
 	n.domEl.Remove()
 }
 
 // TextNode represents a text content node.
 type TextNode struct {
-	text  string
+	vnode *vdom.Text
 	domEl dom.TextNode
 }
 
 // Text creates a new text node.
 func Text(s string) *TextNode {
-	return &TextNode{text: s}
+	return &TextNode{vnode: vdom.NewText(s)}
 }
 
 func (n *TextNode) getKey() string { return "" }
 
+// VNode returns the underlying virtual DOM description.
+// Used by the SSR renderer — not needed in normal component code.
+func (n *TextNode) VNode() *vdom.Text { return n.vnode }
+
 // Mount implements Node.
 func (n *TextNode) Mount(parent dom.Element) dom.Element {
-	textNode := dom.Doc().CreateTextNode(n.text)
+	textNode := dom.Doc().CreateTextNode(n.vnode.Content)
 	n.domEl = textNode
 	textNode.AppendTo(parent)
 	return parent
@@ -300,8 +281,8 @@ func (n *TextNode) Patch(old Node) bool {
 	if !ok {
 		return false
 	}
-	if n.text != oldText.text {
-		n.domEl.SetText(n.text)
+	if n.vnode.Content != oldText.vnode.Content {
+		n.domEl.SetText(n.vnode.Content)
 	}
 	return true
 }
@@ -313,17 +294,16 @@ func (n *TextNode) Unmount() {
 
 // ComponentNode wraps a Component so it can appear as a Node in a tree.
 type ComponentNode struct {
-	component Component
-	key       string
-	rootNode  Node
-	effect    *reactive.Effect
-	mounted   bool
+	vnode    *vdom.Component
+	rootNode Node
+	effect   *reactive.Effect
+	mounted  bool
 }
 
 // C creates a new component node.
 func C(component Component) *ComponentNode {
 	return &ComponentNode{
-		component: component,
+		vnode: vdom.NewComponent("", component),
 	}
 }
 
@@ -331,26 +311,33 @@ func C(component Component) *ComponentNode {
 // Use when rendering dynamic lists of components.
 func CKeyed(key string, component Component) *ComponentNode {
 	return &ComponentNode{
-		component: component,
-		key:       key,
+		vnode: vdom.NewComponent(key, component),
 	}
 }
 
-func (cn *ComponentNode) getKey() string { return cn.key }
+func (cn *ComponentNode) getKey() string { return cn.vnode.Key }
+
+// VNode returns the underlying virtual DOM description.
+// Used by the SSR renderer — not needed in normal component code.
+func (cn *ComponentNode) VNode() *vdom.Component { return cn.vnode }
+
+func (cn *ComponentNode) component() Component {
+	return cn.vnode.Renderer.(Component)
+}
 
 // Mount implements Node.
 func (cn *ComponentNode) Mount(parent dom.Element) dom.Element {
-	var firstRun bool = true
+	var firstRun = true
 
 	cn.effect = reactive.NewEffect(func() {
-		newRoot := cn.component.Render()
+		newRoot := cn.component().Render()
 
 		if firstRun {
 			firstRun = false
 			cn.rootNode = newRoot
 			cn.rootNode.Mount(parent)
 
-			if m, ok := cn.component.(OnMounter); ok {
+			if m, ok := cn.component().(OnMounter); ok {
 				m.OnMount()
 			}
 		} else {
@@ -369,7 +356,6 @@ func (cn *ComponentNode) Mount(parent dom.Element) dom.Element {
 
 // Patch implements Node.
 func (cn *ComponentNode) Patch(old Node) bool {
-	// Components cannot be patched in place
 	return false
 }
 
@@ -379,18 +365,15 @@ func (cn *ComponentNode) Unmount() {
 		return
 	}
 
-	// Call OnUnmount if present
-	if u, ok := cn.component.(OnUnmounter); ok {
+	if u, ok := cn.component().(OnUnmounter); ok {
 		u.OnUnmount()
 	}
 
-	// Dispose the effect
 	if cn.effect != nil {
 		cn.effect.Dispose()
 		cn.effect = nil
 	}
 
-	// Unmount the root node
 	if cn.rootNode != nil {
 		cn.rootNode.Unmount()
 	}

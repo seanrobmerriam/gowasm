@@ -1,3 +1,5 @@
+//go:build js && wasm
+
 package dom
 
 import "syscall/js"
@@ -10,6 +12,12 @@ type Element struct {
 // NewElement creates a new DOM element with the given tag name.
 func NewElement(tag string) Element {
 	return Doc().CreateElement(tag)
+}
+
+// ElementFromJSValue wraps an existing js.Value as an Element.
+// Used by the hydration client.
+func ElementFromJSValue(v js.Value) Element {
+	return Element{val: v}
 }
 
 // ElementFromID returns the element with the given ID, or (zero, false) if not found.
