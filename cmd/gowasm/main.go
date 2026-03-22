@@ -4,9 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/seanrobmerriam/gowasm/cmd/gowasm/internal/build"
+	"github.com/seanrobmerriam/gowasm/cmd/gowasm/internal/pidfile"
 	"github.com/seanrobmerriam/gowasm/cmd/gowasm/internal/reload"
 	"github.com/seanrobmerriam/gowasm/cmd/gowasm/internal/scaffold"
 	"github.com/seanrobmerriam/gowasm/cmd/gowasm/internal/serve"
@@ -28,6 +31,8 @@ func main() {
 		runDev()
 	case "new":
 		runNew()
+	case "stop":
+		runStop()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -41,6 +46,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  serve   Serve a built app\n")
 	fmt.Fprintf(os.Stderr, "  dev     Watch, rebuild, and live-reload\n")
 	fmt.Fprintf(os.Stderr, "  new     Scaffold a new project\n")
+	fmt.Fprintf(os.Stderr, "  stop    Stop a running serve or dev server\n")
 	fmt.Fprintf(os.Stderr, "\nFlags (all subcommands):\n")
 	fmt.Fprintf(os.Stderr, "  -dir    string   directory containing main.go (default \".\")\n")
 	fmt.Fprintf(os.Stderr, "  -out    string   output .wasm filename (default \"app.wasm\")\n")
@@ -77,6 +83,22 @@ func runServe() {
 		os.Exit(1)
 	}
 
+	// Write PID file
+	if err := pidfile.Write(*dir); err != nil {
+		fmt.Fprintf(os.Stderr, "error writing pid file: %v\n", err)
+		os.Exit(1)
+	}
+	defer pidfile.Remove(*dir)
+
+	// Handle signals for clean PID file removal
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		pidfile.Remove(*dir)
+		os.Exit(0)
+	}()
+
 	opts := serve.Options{
 		Dir:      *dir,
 		WasmFile: *out,
@@ -99,6 +121,22 @@ func runDev() {
 	if err := fs.Parse(os.Args[2:]); err != nil {
 		os.Exit(1)
 	}
+
+	// Write PID file
+	if err := pidfile.Write(*dir); err != nil {
+		fmt.Fprintf(os.Stderr, "error writing pid file: %v\n", err)
+		os.Exit(1)
+	}
+	defer pidfile.Remove(*dir)
+
+	// Handle signals for clean PID file removal
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		pidfile.Remove(*dir)
+		os.Exit(0)
+	}()
 
 	// Initial build
 	buildOpts := build.Options{
@@ -195,4 +233,33 @@ func runNew() {
 	fmt.Printf("  gowasm dev -dir .\n")
 	fmt.Printf("\nNote: go.mod contains a replace directive pointing at the local\n")
 	fmt.Printf("gowasm source. Update or remove it once the framework is published.\n")
+}
+
+func runStop() {
+	fs := flag.NewFlagSet("stop", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "project directory")
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		os.Exit(1)
+	}
+
+	pid, err := pidfile.Read(*dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "no server running in %s (no pid file found)\n", *dir)
+		os.Exit(1)
+	}
+
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "could not find process %d: %v\n", pid, err)
+		pidfile.Remove(*dir)
+		os.Exit(1)
+	}
+
+	if err := proc.Signal(syscall.SIGTERM); err != nil {
+		fmt.Fprintf(os.Stderr, "could not signal process %d: %v\n", pid, err)
+		pidfile.Remove(*dir)
+		os.Exit(1)
+	}
+
+	fmt.Printf("stopped server (pid %d)\n", pid)
 }
