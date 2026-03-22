@@ -4,11 +4,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
-	"github.com/yourname/gowasm/cmd/gowasm/internal/build"
-	"github.com/yourname/gowasm/cmd/gowasm/internal/reload"
-	"github.com/yourname/gowasm/cmd/gowasm/internal/serve"
-	"github.com/yourname/gowasm/cmd/gowasm/internal/watch"
+	"github.com/seanrobmerriam/gowasm/cmd/gowasm/internal/build"
+	"github.com/seanrobmerriam/gowasm/cmd/gowasm/internal/reload"
+	"github.com/seanrobmerriam/gowasm/cmd/gowasm/internal/scaffold"
+	"github.com/seanrobmerriam/gowasm/cmd/gowasm/internal/serve"
+	"github.com/seanrobmerriam/gowasm/cmd/gowasm/internal/watch"
 )
 
 func main() {
@@ -24,6 +26,8 @@ func main() {
 		runServe()
 	case "dev":
 		runDev()
+	case "new":
+		runNew()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -36,6 +40,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  build   Compile to WebAssembly\n")
 	fmt.Fprintf(os.Stderr, "  serve   Serve a built app\n")
 	fmt.Fprintf(os.Stderr, "  dev     Watch, rebuild, and live-reload\n")
+	fmt.Fprintf(os.Stderr, "  new     Scaffold a new project\n")
 	fmt.Fprintf(os.Stderr, "\nFlags (all subcommands):\n")
 	fmt.Fprintf(os.Stderr, "  -dir    string   directory containing main.go (default \".\")\n")
 	fmt.Fprintf(os.Stderr, "  -out    string   output .wasm filename (default \"app.wasm\")\n")
@@ -141,4 +146,53 @@ func runDev() {
 		fmt.Fprintf(os.Stderr, "watch error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func runNew() {
+	if len(os.Args) < 3 {
+		fmt.Fprintf(os.Stderr, "Usage: gowasm new <name> [-module <mod>]\n")
+		os.Exit(1)
+	}
+
+	name := os.Args[2]
+
+	fs := flag.NewFlagSet("new", flag.ContinueOnError)
+	defaultModule := "github.com/seanrobmerriam/" + name
+	module := fs.String("module", defaultModule, "Go module path")
+
+	if err := fs.Parse(os.Args[3:]); err != nil {
+		os.Exit(1)
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	frameworkDir, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	opts := scaffold.Options{
+		Name:         name,
+		Module:       *module,
+		TargetDir:    filepath.Join(cwd, name),
+		FrameworkDir: frameworkDir,
+	}
+
+	if err := scaffold.Run(opts); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("\nCreated %s\n\n", name)
+	fmt.Printf("Next steps:\n")
+	fmt.Printf("  cd %s\n", name)
+	fmt.Printf("  go mod tidy\n")
+	fmt.Printf("  gowasm dev -dir .\n")
+	fmt.Printf("\nNote: go.mod contains a replace directive pointing at the local\n")
+	fmt.Printf("gowasm source. Update or remove it once the framework is published.\n")
 }
