@@ -123,7 +123,9 @@ gowasm build -dir ./myapp -out app.wasm
 ### `gowasm serve`
 
 Serves a pre-built app over HTTP. Sets the required COOP/COEP headers and
-serves `wasm_exec.js` automatically from your local Go installation.
+serves `wasm_exec.js` automatically from your local Go installation. Unknown
+paths fall back to `index.html`, which is required for deep links when using
+the History API router.
 
 ```bash
 gowasm serve -dir ./myapp -out app.wasm -port 8080
@@ -205,6 +207,22 @@ component.H("div", component.Children(
 ))
 ```
 
+**Keyed list rendering**
+
+Use keys for dynamic sibling lists so the reconciler can preserve identity
+across insertions, deletions, and reordering.
+
+```go
+component.H("ul", component.Children(
+    component.CKeyed("todo-1", NewTodoItem(todo1)),
+    component.CKeyed("todo-2", NewTodoItem(todo2)),
+    component.H("li",
+        component.Key("summary"),
+        component.Children(component.Text("2 items")),
+    ),
+))
+```
+
 ---
 
 ### `pkg/reactive`
@@ -258,7 +276,10 @@ reactive.Batch(func() {
 
 ### `pkg/router`
 
-Hash-based client-side routing (`#/path`).
+Client-side routing with two modes:
+
+- Hash mode: `#/path` via `router.New()`
+- History API mode: `/path` via `router.New(router.WithHistoryAPI())`
 
 **Setup**
 
@@ -277,6 +298,16 @@ r.NotFound(func(ctx router.RouteContext) component.Node {
 component.Mount("app", r.View())
 ```
 
+**History API mode**
+
+```go
+r := router.New(router.WithHistoryAPI())
+```
+
+Use this mode when you want clean URLs without `#`. `gowasm serve` and
+`gowasm dev` serve `index.html` as a fallback for unknown routes so direct
+navigation and refreshes continue to work.
+
 **Handlers**
 
 A handler receives a `RouteContext` and returns a `component.Node`.
@@ -284,7 +315,7 @@ A handler receives a `RouteContext` and returns a `component.Node`.
 ```go
 func userHandler(ctx router.RouteContext) component.Node {
     id := ctx.Get("id")         // named param
-    tab := ctx.Get("tab")       // query string: #/users/42?tab=posts
+    tab := ctx.Get("tab")       // query string: #/users/42?tab=posts or /users/42?tab=posts
     return component.Text("user: " + id + " tab: " + tab)
 }
 ```
@@ -305,6 +336,9 @@ router.Link(r, router.LinkProps{
     Active:   "nav-link--active", // added when path matches
 })
 ```
+
+In hash mode the rendered href is `#/about`; in History API mode it is
+`/about`.
 
 **Route patterns**
 
@@ -364,6 +398,12 @@ on the current one.
 installation at runtime, so it always matches the compiler version. You do not
 need to vendor it or keep it in sync manually.
 
+**History API routes are server-backed**
+
+When using `router.WithHistoryAPI()`, direct navigation to `/users/42` or a
+refresh on that route still works because the server falls back to
+`index.html` for unknown paths.
+
 **Binary size**
 
 The standard Go toolchain produces binaries in the 2-5MB range for typical
@@ -377,12 +417,16 @@ The `examples/` directory contains:
 
 - `examples/counter` — minimal signal and event handling
 - `examples/router-demo` — multi-page routing with params and links
+- `examples/router-history` — History API router with clean URLs
+- `examples/todo` — shared state, forms, filters, and keyed list rendering
 
 Run either with:
 
 ```bash
 gowasm dev -dir examples/counter
 gowasm dev -dir examples/router-demo
+gowasm dev -dir examples/router-history
+gowasm dev -dir examples/todo
 ```
 
 ---
@@ -397,9 +441,6 @@ See LICENSE.md
 
 - `gowasm new` scaffold command to generate a starter project
 - Form input helpers: `InputValue(e Event) string`, `CheckboxChecked(e Event) bool`
-- Todo list example covering lists, conditionals, and form inputs
 - TinyGo build target for smaller binaries
-- Keyed list reconciliation to preserve element identity across re-renders
-- History API router (`/path` instead of `#/path`) as an alternative to hash routing
 - Server-side rendering and client hydration
 - `go test` harness for unit testing components outside the browser
