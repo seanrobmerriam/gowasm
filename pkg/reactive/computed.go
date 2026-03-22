@@ -7,16 +7,20 @@ type computedObserver[T any] struct {
 
 func (co *computedObserver[T]) notify() {
 	co.c.signal.mu.Lock()
+	wasDirty := co.c.signal.dirty
 	co.c.signal.dirty = true
 	co.c.signal.mu.Unlock()
+	if !wasDirty {
+		co.c.signal.notifySubscribers()
+	}
 }
 
 func (co *computedObserver[T]) addDependency(sig *SignalBase) {
-	sig.addSubscriber(co)
+	co.c.addDependency(sig)
 }
 
 func (co *computedObserver[T]) removeDependency(sig *SignalBase) {
-	sig.removeSubscriber(co)
+	co.c.removeDependency(sig)
 }
 
 // Computed represents a computed value that automatically tracks its dependencies.
@@ -26,6 +30,7 @@ type Computed[T any] struct {
 	cached   T
 	hasValue bool
 	obs      *computedObserver[T]
+	deps     []*SignalBase
 }
 
 // NewComputed creates a new computed value that re-evaluates when dependencies change.
@@ -47,11 +52,17 @@ func (c *Computed[T]) Get() T {
 	// Register as subscriber so anyone reading this computed gets notified when it changes
 	current := currentObserver()
 	if current != nil {
+		current.addDependency(&c.signal)
 		c.signal.addSubscriber(current)
 	}
 
 	// Check if we need to recompute
 	if c.signal.dirty || !c.hasValue {
+		for _, dep := range c.deps {
+			dep.removeSubscriber(c.obs)
+		}
+		c.deps = nil
+
 		// Push the computedObserver onto the stack so dependencies register with it
 		pushObserver(c.obs)
 		c.cached = c.fn()
@@ -66,12 +77,22 @@ func (c *Computed[T]) Get() T {
 
 // addDependency implements the observer interface.
 func (c *Computed[T]) addDependency(sig *SignalBase) {
-	sig.addSubscriber(c.obs)
+	for _, dep := range c.deps {
+		if dep == sig {
+			return
+		}
+	}
+	c.deps = append(c.deps, sig)
 }
 
 // removeDependency implements the observer interface.
 func (c *Computed[T]) removeDependency(sig *SignalBase) {
-	sig.removeSubscriber(c.obs)
+	for i, dep := range c.deps {
+		if dep == sig {
+			c.deps = append(c.deps[:i], c.deps[i+1:]...)
+			return
+		}
+	}
 }
 
 // notify implements the observer interface.

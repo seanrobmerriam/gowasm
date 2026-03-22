@@ -17,11 +17,13 @@ func Batch(fn func()) {
 	batchMu.Lock()
 	batchDepth--
 	if batchDepth == 0 {
-		// Flush pending notifications
-		for _, fn := range batchQueue {
+		queue := batchQueue
+		batchQueue = nil
+		batchMu.Unlock()
+		for _, fn := range queue {
 			fn()
 		}
-		batchQueue = nil
+		return
 	}
 	batchMu.Unlock()
 }
@@ -54,9 +56,17 @@ func (e *Effect) run() {
 		return
 	}
 	e.running = true
+	oldDeps := e.subscribed
+	e.subscribed = nil
 	e.mu.Unlock()
 
+	for _, sig := range oldDeps {
+		sig.removeSubscriber(e)
+	}
+
+	pushObserver(e)
 	e.fn()
+	popObserver()
 
 	e.mu.Lock()
 	e.running = false

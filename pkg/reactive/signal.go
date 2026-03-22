@@ -39,11 +39,12 @@ func currentObserver() observer {
 
 // SignalBase is the internal non-generic signal implementation.
 type SignalBase struct {
-	value    any
-	mu       sync.RWMutex
-	subs     []observer
-	dirty    bool
-	version  uint64
+	value   any
+	mu      sync.RWMutex
+	subs    []observer
+	dirty   bool
+	queued  bool
+	version uint64
 }
 
 // newSignalBase creates a new signal base.
@@ -69,6 +70,25 @@ func (s *SignalBase) setValue(v any) {
 	s.version++
 	s.dirty = false
 	s.mu.Unlock()
+
+	batchMu.Lock()
+	if batchDepth > 0 {
+		s.mu.Lock()
+		if !s.queued {
+			s.queued = true
+			batchQueue = append(batchQueue, func() {
+				s.mu.Lock()
+				s.queued = false
+				s.mu.Unlock()
+				s.notifySubscribers()
+			})
+		}
+		s.mu.Unlock()
+		batchMu.Unlock()
+		return
+	}
+	batchMu.Unlock()
+
 	s.notifySubscribers()
 }
 

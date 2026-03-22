@@ -152,6 +152,39 @@ Accepts the same flags as `serve`.
 
 ---
 
+## Testing
+
+The project now has two test tiers:
+
+- `pkg/reactive` uses standard `go test` and runs without a browser
+- `pkg/dom` and `pkg/component` run as real WebAssembly in headless Chrome via
+  [`wasmbrowsertest`](https://github.com/agnivade/wasmbrowsertest)
+
+Install the browser test runner once:
+
+```bash
+go install github.com/agnivade/wasmbrowsertest@latest
+```
+
+Run the full suite:
+
+```bash
+make test
+```
+
+Or run each tier separately:
+
+```bash
+make test-reactive
+make test-dom
+make test-component
+```
+
+`test-dom` and `test-component` require Chrome or Chromium to be installed on
+the machine.
+
+---
+
 ## Packages
 
 ### `pkg/component`

@@ -6,6 +6,8 @@ gowasm
 *.test
 *.out
 /vendor/
+coverage/
+coverage.html
 
 # Dev tooling
 tmp/
