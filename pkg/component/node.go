@@ -109,6 +109,9 @@ func (n *ElementNode) Patch(old Node) bool {
 		return false
 	}
 
+	// Inherit the live DOM element from the old node
+	n.domEl = oldEl.domEl
+
 	// Update ID
 	if n.id != oldEl.id {
 		if n.id != "" {
@@ -147,7 +150,14 @@ func (n *ElementNode) Patch(old Node) bool {
 		}
 	}
 
-	// Update event listeners - simplified approach
+	// Release old event listeners before registering new ones
+	for _, handle := range oldEl.listeners {
+		handle.Release()
+	}
+	oldEl.listeners = nil
+	n.listeners = nil
+
+	// Register new event listeners
 	for event, handler := range n.events {
 		handle := n.domEl.AddEventListener(event, handler)
 		n.listeners = append(n.listeners, handle)
@@ -161,14 +171,44 @@ func (n *ElementNode) Patch(old Node) bool {
 
 // patchChildren reconciles the children array.
 func (n *ElementNode) patchChildren(oldChildren []Node) {
-	// Remove old children that are no longer present
-	for i := len(oldChildren) - 1; i >= 0; i-- {
-		oldChildren[i].Unmount()
+	newLen := len(n.children)
+	oldLen := len(oldChildren)
+	minLen := newLen
+	if oldLen < minLen {
+		minLen = oldLen
 	}
 
-	// Mount new children
-	for _, child := range n.children {
-		child.Mount(n.domEl)
+	// Patch overlapping range
+	for i := 0; i < minLen; i++ {
+		newChild := n.children[i]
+		oldChild := oldChildren[i]
+
+		// Transfer DOM reference for in-place patch
+		if oldEl, ok := oldChild.(*ElementNode); ok {
+			if newEl, ok2 := newChild.(*ElementNode); ok2 {
+				newEl.domEl = oldEl.domEl
+			}
+		}
+		if oldTxt, ok := oldChild.(*TextNode); ok {
+			if newTxt, ok2 := newChild.(*TextNode); ok2 {
+				newTxt.domEl = oldTxt.domEl
+			}
+		}
+
+		if !newChild.Patch(oldChild) {
+			oldChild.Unmount()
+			newChild.Mount(n.domEl)
+		}
+	}
+
+	// Mount new children beyond old length
+	for i := minLen; i < newLen; i++ {
+		n.children[i].Mount(n.domEl)
+	}
+
+	// Unmount old children beyond new length
+	for i := minLen; i < oldLen; i++ {
+		oldChildren[i].Unmount()
 	}
 }
 
@@ -242,26 +282,26 @@ func C(component Component) *ComponentNode {
 
 // Mount implements Node.
 func (cn *ComponentNode) Mount(parent dom.Element) dom.Element {
-	// Call Render to get initial node tree
-	cn.rootNode = cn.component.Render()
-	cn.rootNode.Mount(parent)
+	var firstRun bool = true
 
-	// Call OnMount if present
-	if m, ok := cn.component.(OnMounter); ok {
-		m.OnMount()
-	}
-
-	// Create effect to re-render when signals change
 	cn.effect = reactive.NewEffect(func() {
-		// Re-render the component
-		oldRoot := cn.rootNode
-		cn.rootNode = cn.component.Render()
+		newRoot := cn.component.Render()
 
-		// Patch the old root
-		if !cn.rootNode.Patch(oldRoot) {
-			// Node type changed, do full remount
-			oldRoot.Unmount()
+		if firstRun {
+			firstRun = false
+			cn.rootNode = newRoot
 			cn.rootNode.Mount(parent)
+
+			if m, ok := cn.component.(OnMounter); ok {
+				m.OnMount()
+			}
+		} else {
+			oldRoot := cn.rootNode
+			cn.rootNode = newRoot
+			if !cn.rootNode.Patch(oldRoot) {
+				oldRoot.Unmount()
+				cn.rootNode.Mount(parent)
+			}
 		}
 	})
 

@@ -28,23 +28,19 @@ func Batch(fn func()) {
 
 // Effect represents an effect that re-runs when its dependencies change.
 type Effect struct {
-	fn            func()
-	subscribed    []*SignalBase
-	mu            sync.Mutex
-	disposed      bool
+	fn         func()
+	subscribed []*SignalBase
+	mu         sync.Mutex
+	disposed   bool
+	running    bool
 }
 
 // NewEffect creates a new effect that runs fn immediately and re-runs when dependencies change.
 func NewEffect(fn func()) *Effect {
-	e := &Effect{
-		fn:         fn,
-		subscribed: nil,
-		disposed:   false,
-	}
+	e := &Effect{fn: fn}
 
-	// Push onto observer stack and run
 	pushObserver(e)
-	e.run()
+	fn()
 	popObserver()
 
 	return e
@@ -53,24 +49,29 @@ func NewEffect(fn func()) *Effect {
 // run executes the effect function and updates its subscriptions.
 func (e *Effect) run() {
 	e.mu.Lock()
-	e.disposed = true // Mark as disposed to prevent recursive updates
+	if e.running {
+		e.mu.Unlock()
+		return
+	}
+	e.running = true
 	e.mu.Unlock()
 
 	e.fn()
 
 	e.mu.Lock()
-	e.disposed = false
+	e.running = false
 	e.mu.Unlock()
 }
 
 // notify implements the observer interface.
 func (e *Effect) notify() {
-	if e.disposed {
+	e.mu.Lock()
+	isDone := e.disposed
+	e.mu.Unlock()
+	if isDone {
 		return
 	}
-
-	// Re-run in batch to avoid cascading updates
-	Batch(e.run)
+	e.run()
 }
 
 // addDependency adds a signal to the effect's dependency list.

@@ -9,7 +9,7 @@ type Element struct {
 
 // NewElement creates a new DOM element with the given tag name.
 func NewElement(tag string) Element {
-	return Element{val: Doc().val.Call("createElement", tag)}
+	return Doc().CreateElement(tag)
 }
 
 // ElementFromID returns the element with the given ID, or (zero, false) if not found.
@@ -72,7 +72,7 @@ func (e Element) AddEventListener(event string, fn EventHandler) ListenerHandle 
 		return nil
 	})
 	e.val.Call("addEventListener", event, wrapper)
-	return ListenerHandle{fn: wrapper}
+	return ListenerHandle{fn: wrapper, event: event, target: e.val}
 }
 
 // RemoveEventListener removes an event listener using the handle.
@@ -82,10 +82,13 @@ func (e Element) RemoveEventListener(handle ListenerHandle) {
 
 // ListenerHandle is an opaque handle for removing event listeners.
 type ListenerHandle struct {
-	fn js.Func
+	fn     js.Func
+	event  string
+	target js.Value
 }
 
 // Release releases the listener function.
 func (h ListenerHandle) Release() {
+	h.target.Call("removeEventListener", h.event, h.fn)
 	h.fn.Release()
 }
