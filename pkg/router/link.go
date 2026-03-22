@@ -26,8 +26,13 @@ func Link(r *Router, props LinkProps) component.Node {
 		classes += props.Active
 	}
 
+	href := "#" + props.To
+	if r.useHistoryAPI {
+		href = props.To
+	}
+
 	opts := []component.Option{
-		component.Attr("href", "#"+props.To),
+		component.Attr("href", href),
 		component.On("click", func(e dom.Event) {
 			e.PreventDefault()
 			r.Navigate(props.To)

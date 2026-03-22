@@ -46,3 +46,13 @@ func ID(id string) Option {
 		n.id = id
 	}
 }
+
+// Key sets a stable reconciliation key on an element node.
+// Use keys when rendering lists of dynamic children to help the reconciler
+// match old and new nodes by identity rather than position.
+// Keys must be unique among siblings.
+func Key(k string) Option {
+	return func(n *ElementNode) {
+		n.key = k
+	}
+}

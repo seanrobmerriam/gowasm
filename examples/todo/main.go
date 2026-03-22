@@ -190,7 +190,10 @@ func (t *TodoList) Render() component.Node {
 	todos := t.app.filteredTodos()
 	children := make([]component.Node, 0, len(todos))
 	for _, todo := range todos {
-		children = append(children, component.C(NewTodoItem(t.app, todo)))
+		children = append(children, component.CKeyed(
+			itoa(todo.ID),
+			NewTodoItem(t.app, todo),
+		))
 	}
 
 	return component.H("ul",

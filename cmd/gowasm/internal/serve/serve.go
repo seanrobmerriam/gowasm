@@ -47,15 +47,19 @@ func handler(opts Options) http.Handler {
 	// index.html
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		setHeaders(w)
-		path := filepath.Join(opts.Dir, r.URL.Path)
-		if r.URL.Path == "/" {
-			path = filepath.Join(opts.Dir, "index.html")
+
+		// Try to serve the exact file if it exists
+		exactPath := filepath.Join(opts.Dir, r.URL.Path)
+		if r.URL.Path != "/" {
+			if info, err := os.Stat(exactPath); err == nil && !info.IsDir() {
+				http.ServeFile(w, r, exactPath)
+				return
+			}
 		}
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			http.NotFound(w, r)
-			return
-		}
-		data, err := os.ReadFile(path)
+
+		// Fall back to index.html — required for History API routing
+		indexPath := filepath.Join(opts.Dir, "index.html")
+		data, err := os.ReadFile(indexPath)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return

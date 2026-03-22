@@ -10,6 +10,17 @@ import (
 // Handler is a function that returns a Node given the matched route context.
 type Handler func(ctx RouteContext) component.Node
 
+// RouterOption configures a Router.
+type RouterOption func(*Router)
+
+// WithHistoryAPI switches the router from hash-based to pushState-based
+// navigation. The server must serve index.html for all routes.
+func WithHistoryAPI() RouterOption {
+	return func(r *Router) {
+		r.useHistoryAPI = true
+	}
+}
+
 // route is a single registered route.
 type route struct {
 	pattern     string
@@ -34,15 +45,16 @@ const (
 
 // Router matches URL paths to handler functions.
 type Router struct {
-	routes   []route
-	notFound Handler
-	signal   *reactive.Signal[RouteContext]
-	current  RouteContext
+	routes        []route
+	notFound      Handler
+	signal        *reactive.Signal[RouteContext]
+	current       RouteContext
+	useHistoryAPI bool
 }
 
 // New creates a new Router and installs the hashchange listener.
 // New must be called once per application.
-func New() *Router {
+func New(opts ...RouterOption) *Router {
 	r := &Router{
 		routes: []route{},
 		notFound: func(ctx RouteContext) component.Node {
@@ -53,11 +65,25 @@ func New() *Router {
 		},
 	}
 
-	// Initialize hash history
-	history.init()
+	// Apply options
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	// Initialise the appropriate history backend
+	if r.useHistoryAPI {
+		histAPI.init()
+	} else {
+		history.init()
+	}
 
 	// Build initial context with query parsing
-	initialPath := history.current
+	var initialPath string
+	if r.useHistoryAPI {
+		initialPath = histAPI.current
+	} else {
+		initialPath = history.current
+	}
 	initialCtx := RouteContext{Path: initialPath}
 	if idx := strings.Index(initialPath, "?"); idx >= 0 {
 		initialCtx.Path = initialPath[:idx]
@@ -68,16 +94,24 @@ func New() *Router {
 	r.current = initialCtx
 	r.signal = reactive.NewSignal[RouteContext](initialCtx)
 
-	// Listen for hash changes
-	history.onchange(func(path string) {
+	// Register change listener on the appropriate backend
+	changeHandler := func(path string) {
 		ctx := RouteContext{Path: path}
 		if idx := strings.Index(path, "?"); idx >= 0 {
 			ctx.Path = path[:idx]
 			ctx.Query = parseQuery(path[idx+1:])
+		} else {
+			ctx.Query = make(map[string]string)
 		}
 		r.current = ctx
 		r.signal.Set(ctx)
-	})
+	}
+
+	if r.useHistoryAPI {
+		histAPI.onchange(changeHandler)
+	} else {
+		history.onchange(changeHandler)
+	}
 
 	return r
 }
@@ -114,7 +148,11 @@ func (r *Router) View() *routerView {
 
 // Navigate navigates to the given path, e.g. "/users/42".
 func (r *Router) Navigate(path string) {
-	history.navigate(path)
+	if r.useHistoryAPI {
+		histAPI.navigate(path)
+	} else {
+		history.navigate(path)
+	}
 }
 
 // Current returns the current RouteContext.

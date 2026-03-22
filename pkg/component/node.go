@@ -14,6 +14,7 @@ type Node interface {
 	Patch(old Node) bool
 	// Unmount removes this node from the DOM and releases resources.
 	Unmount()
+	getKey() string
 }
 
 // Component produces a Node tree describing its current UI.
@@ -34,6 +35,7 @@ type OnUnmounter interface {
 // ElementNode represents a DOM element node.
 type ElementNode struct {
 	tag       string
+	key       string
 	attrs     map[string]string
 	styles    map[string]string
 	events    map[string]dom.EventHandler
@@ -60,6 +62,8 @@ func H(tag string, opts ...Option) *ElementNode {
 	}
 	return n
 }
+
+func (n *ElementNode) getKey() string { return n.key }
 
 // Mount implements Node.
 func (n *ElementNode) Mount(parent dom.Element) dom.Element {
@@ -171,44 +175,84 @@ func (n *ElementNode) Patch(old Node) bool {
 
 // patchChildren reconciles the children array.
 func (n *ElementNode) patchChildren(oldChildren []Node) {
-	newLen := len(n.children)
-	oldLen := len(oldChildren)
-	minLen := newLen
-	if oldLen < minLen {
-		minLen = oldLen
+	// Separate keyed and unkeyed old children
+	oldKeyed := make(map[string]Node)
+	oldUnkeyed := make([]Node, 0, len(oldChildren))
+
+	for _, child := range oldChildren {
+		if k := child.getKey(); k != "" {
+			oldKeyed[k] = child
+		} else {
+			oldUnkeyed = append(oldUnkeyed, child)
+		}
 	}
 
-	// Patch overlapping range
-	for i := 0; i < minLen; i++ {
-		newChild := n.children[i]
-		oldChild := oldChildren[i]
+	// Track which old keyed nodes were consumed
+	consumed := make(map[string]bool)
 
-		// Transfer DOM reference for in-place patch
-		if oldEl, ok := oldChild.(*ElementNode); ok {
-			if newEl, ok2 := newChild.(*ElementNode); ok2 {
-				newEl.domEl = oldEl.domEl
+	// Index into unkeyed old children
+	unkeyedIdx := 0
+
+	for _, newChild := range n.children {
+		k := newChild.getKey()
+
+		if k != "" {
+			// Keyed path: find matching old node by key
+			if oldChild, ok := oldKeyed[k]; ok {
+				consumed[k] = true
+				// Transfer DOM reference for ElementNode
+				if oldEl, ok2 := oldChild.(*ElementNode); ok2 {
+					if newEl, ok3 := newChild.(*ElementNode); ok3 {
+						newEl.domEl = oldEl.domEl
+					}
+				}
+				if !newChild.Patch(oldChild) {
+					oldChild.Unmount()
+					newChild.Mount(n.domEl)
+				}
+			} else {
+				// No matching old node — mount as new
+				newChild.Mount(n.domEl)
+			}
+		} else {
+			// Unkeyed path: match by index (existing behaviour)
+			if unkeyedIdx < len(oldUnkeyed) {
+				oldChild := oldUnkeyed[unkeyedIdx]
+				unkeyedIdx++
+
+				// Transfer DOM reference
+				if oldEl, ok := oldChild.(*ElementNode); ok {
+					if newEl, ok2 := newChild.(*ElementNode); ok2 {
+						newEl.domEl = oldEl.domEl
+					}
+				}
+				if oldTxt, ok := oldChild.(*TextNode); ok {
+					if newTxt, ok2 := newChild.(*TextNode); ok2 {
+						newTxt.domEl = oldTxt.domEl
+					}
+				}
+
+				if !newChild.Patch(oldChild) {
+					oldChild.Unmount()
+					newChild.Mount(n.domEl)
+				}
+			} else {
+				// No matching old node — mount as new
+				newChild.Mount(n.domEl)
 			}
 		}
-		if oldTxt, ok := oldChild.(*TextNode); ok {
-			if newTxt, ok2 := newChild.(*TextNode); ok2 {
-				newTxt.domEl = oldTxt.domEl
-			}
-		}
-
-		if !newChild.Patch(oldChild) {
-			oldChild.Unmount()
-			newChild.Mount(n.domEl)
-		}
 	}
 
-	// Mount new children beyond old length
-	for i := minLen; i < newLen; i++ {
-		n.children[i].Mount(n.domEl)
+	// Unmount remaining unkeyed old children
+	for i := unkeyedIdx; i < len(oldUnkeyed); i++ {
+		oldUnkeyed[i].Unmount()
 	}
 
-	// Unmount old children beyond new length
-	for i := minLen; i < oldLen; i++ {
-		oldChildren[i].Unmount()
+	// Unmount keyed old children that were not consumed
+	for k, child := range oldKeyed {
+		if !consumed[k] {
+			child.Unmount()
+		}
 	}
 }
 
@@ -240,6 +284,8 @@ func Text(s string) *TextNode {
 	return &TextNode{text: s}
 }
 
+func (n *TextNode) getKey() string { return "" }
+
 // Mount implements Node.
 func (n *TextNode) Mount(parent dom.Element) dom.Element {
 	textNode := dom.Doc().CreateTextNode(n.text)
@@ -268,6 +314,7 @@ func (n *TextNode) Unmount() {
 // ComponentNode wraps a Component so it can appear as a Node in a tree.
 type ComponentNode struct {
 	component Component
+	key       string
 	rootNode  Node
 	effect    *reactive.Effect
 	mounted   bool
@@ -279,6 +326,17 @@ func C(component Component) *ComponentNode {
 		component: component,
 	}
 }
+
+// CKeyed creates a component node with a reconciliation key.
+// Use when rendering dynamic lists of components.
+func CKeyed(key string, component Component) *ComponentNode {
+	return &ComponentNode{
+		component: component,
+		key:       key,
+	}
+}
+
+func (cn *ComponentNode) getKey() string { return cn.key }
 
 // Mount implements Node.
 func (cn *ComponentNode) Mount(parent dom.Element) dom.Element {

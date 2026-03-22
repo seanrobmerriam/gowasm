@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>gowasm history router</title>
+        <style>
+            body {
+                font-family: system-ui, sans-serif;
+                max-width: 600px;
+                margin: 4rem auto;
+                padding: 0 1rem;
+            }
+            a { color: #0066cc; text-decoration: none; }
+            a:hover { text-decoration: underline; }
+            a.active { font-weight: bold; }
+        </style>
+    </head>
+    <body>
+        <div id="app"></div>
+        <script src="/wasm_exec.js"></script>
+        <script>
+            const go = new Go();
+            WebAssembly.instantiateStreaming(
+                fetch("/app.wasm"),
+                go.importObject,
+            ).then((result) => go.run(result.instance));
+        </script>
+        <!-- livereload -->
+    </body>
+</html>
