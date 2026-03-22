@@ -1,0 +1,21 @@
+# Binaries
+*.wasm
+gowasm
+
+# Go
+*.test
+*.out
+/vendor/
+
+# Dev tooling
+tmp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
