@@ -389,7 +389,7 @@ gowasm dev -dir examples/router-demo
 
 ## License
 
-MIT
+See LICENSE.md
 
 ---
 
