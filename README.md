@@ -402,5 +402,4 @@ See LICENSE.md
 - Keyed list reconciliation to preserve element identity across re-renders
 - History API router (`/path` instead of `#/path`) as an alternative to hash routing
 - Server-side rendering and client hydration
-- Fix module path from `github.com/seanrobmerriam/gowasm` to the real repository path
 - `go test` harness for unit testing components outside the browser
