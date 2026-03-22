@@ -33,7 +33,10 @@ func Watch(opts Options) error {
 		return nil
 	})
 
-	debounce := time.NewTimer(200 * time.Millisecond)
+	debounce := time.NewTimer(time.Hour)
+	if !debounce.Stop() {
+		<-debounce.C
+	}
 
 	go func() {
 		for {

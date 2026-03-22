@@ -1,10 +1,7 @@
 package serve
 
 import (
-	"crypto/sha1"
-	"encoding/base64"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -134,22 +131,4 @@ func findSubstring(data []byte, start int, sub string) int {
 		}
 	}
 	return -1
-}
-
-// writeWebSocketFrame writes a minimal WebSocket text frame.
-func writeWebSocketFrame(w io.Writer, msg string) error {
-	frame := make([]byte, 2+len(msg))
-	frame[0] = 0x81 // FIN=1, opcode=1 (text)
-	frame[1] = byte(len(msg))
-	copy(frame[2:], msg)
-	_, err := w.Write(frame)
-	return err
-}
-
-// computeAcceptKey computes the WebSocket accept key.
-func computeAcceptKey(key string) string {
-	const magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-	h := sha1.New()
-	h.Write([]byte(key + magic))
-	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
