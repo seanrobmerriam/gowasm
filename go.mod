@@ -1,4 +1,4 @@
-module github.com/yourname/gowasm
+module github.com/seanrobmerriam/gowasm
 
 go 1.21
 

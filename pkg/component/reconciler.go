@@ -1,6 +1,6 @@
 package component
 
-import "github.com/yourname/gowasm/pkg/dom"
+import "github.com/seanrobmerriam/gowasm/pkg/dom"
 
 // Reconcile updates the DOM by comparing old and new node trees.
 // It returns the updated root node.

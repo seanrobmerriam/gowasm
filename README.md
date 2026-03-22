@@ -18,13 +18,13 @@ build pipeline beyond the standard Go toolchain.
 ## Installation
 
 ```bash
-go get github.com/yourname/gowasm
+go get github.com/seanrobmerriam/gowasm
 ```
 
 Install the CLI:
 
 ```bash
-go install github.com/yourname/gowasm/cmd/gowasm@latest
+go install github.com/seanrobmerriam/gowasm/cmd/gowasm@latest
 ```
 
 ---
@@ -39,9 +39,9 @@ Create a new directory for your app and add a `main.go`:
 package main
 
 import (
-    "github.com/yourname/gowasm/pkg/component"
-    "github.com/yourname/gowasm/pkg/dom"
-    "github.com/yourname/gowasm/pkg/reactive"
+    "github.com/seanrobmerriam/gowasm/pkg/component"
+    "github.com/seanrobmerriam/gowasm/pkg/dom"
+    "github.com/seanrobmerriam/gowasm/pkg/reactive"
 )
 
 type Counter struct {
@@ -402,5 +402,5 @@ MIT
 - Keyed list reconciliation to preserve element identity across re-renders
 - History API router (`/path` instead of `#/path`) as an alternative to hash routing
 - Server-side rendering and client hydration
-- Fix module path from `github.com/yourname/gowasm` to the real repository path
+- Fix module path from `github.com/seanrobmerriam/gowasm` to the real repository path
 - `go test` harness for unit testing components outside the browser

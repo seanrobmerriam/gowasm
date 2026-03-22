@@ -1,6 +1,6 @@
 package component
 
-import "github.com/yourname/gowasm/pkg/dom"
+import "github.com/seanrobmerriam/gowasm/pkg/dom"
 
 // Mount mounts component into the DOM element with the given ID.
 // It blocks forever (required for WASM main goroutine).

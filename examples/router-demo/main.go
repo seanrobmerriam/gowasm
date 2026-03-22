@@ -3,8 +3,8 @@
 package main
 
 import (
-	"github.com/yourname/gowasm/pkg/component"
-	"github.com/yourname/gowasm/pkg/router"
+	"github.com/seanrobmerriam/gowasm/pkg/component"
+	"github.com/seanrobmerriam/gowasm/pkg/router"
 )
 
 func main() {
@@ -39,7 +39,7 @@ func main() {
 
 	r.Handle("/users/:id", func(ctx router.RouteContext) component.Node {
 		return component.H("div", component.Children(
-			component.H("h1", component.Children(component.Text("User: " + ctx.Get("id")))),
+			component.H("h1", component.Children(component.Text("User: "+ctx.Get("id")))),
 			router.Link(r, router.LinkProps{
 				To:       "/",
 				Children: []component.Node{component.Text("← Home")},

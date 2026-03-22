@@ -1,6 +1,6 @@
 package router
 
-import "github.com/yourname/gowasm/pkg/component"
+import "github.com/seanrobmerriam/gowasm/pkg/component"
 
 // routerView is the internal component returned by Router.View().
 type routerView struct {

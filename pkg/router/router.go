@@ -3,8 +3,8 @@ package router
 import (
 	"strings"
 
-	"github.com/yourname/gowasm/pkg/component"
-	"github.com/yourname/gowasm/pkg/reactive"
+	"github.com/seanrobmerriam/gowasm/pkg/component"
+	"github.com/seanrobmerriam/gowasm/pkg/reactive"
 )
 
 // Handler is a function that returns a Node given the matched route context.

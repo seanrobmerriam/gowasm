@@ -3,9 +3,9 @@
 package main
 
 import (
-	"github.com/yourname/gowasm/pkg/component"
-	"github.com/yourname/gowasm/pkg/dom"
-	"github.com/yourname/gowasm/pkg/reactive"
+	"github.com/seanrobmerriam/gowasm/pkg/component"
+	"github.com/seanrobmerriam/gowasm/pkg/dom"
+	"github.com/seanrobmerriam/gowasm/pkg/reactive"
 )
 
 type Counter struct {

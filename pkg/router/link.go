@@ -1,8 +1,8 @@
 package router
 
 import (
-	"github.com/yourname/gowasm/pkg/component"
-	"github.com/yourname/gowasm/pkg/dom"
+	"github.com/seanrobmerriam/gowasm/pkg/component"
+	"github.com/seanrobmerriam/gowasm/pkg/dom"
 )
 
 // LinkProps configures a Link.

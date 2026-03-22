@@ -1,8 +1,8 @@
 package component
 
 import (
-	"github.com/yourname/gowasm/pkg/dom"
-	"github.com/yourname/gowasm/pkg/reactive"
+	"github.com/seanrobmerriam/gowasm/pkg/dom"
+	"github.com/seanrobmerriam/gowasm/pkg/reactive"
 )
 
 // Node is the unit of UI. Every element in the tree is a Node.

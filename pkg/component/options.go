@@ -1,6 +1,6 @@
 package component
 
-import "github.com/yourname/gowasm/pkg/dom"
+import "github.com/seanrobmerriam/gowasm/pkg/dom"
 
 // Option is a functional option for configuring an ElementNode.
 type Option func(*ElementNode)
